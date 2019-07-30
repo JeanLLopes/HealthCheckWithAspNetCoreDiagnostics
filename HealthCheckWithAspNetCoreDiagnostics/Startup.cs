@@ -2,22 +2,37 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace HealthCheckWithAspNetCoreDiagnostics
 {
     public class Startup
     {
-        // This method gets called by the runtime. Use this method to add services to the container.
-        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
-        public void ConfigureServices(IServiceCollection services)
+        public IConfiguration Configuration { get; set; }
+
+
+        public Startup(IConfiguration configuration)
         {
+            Configuration = configuration;
         }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        public void ConfigureServices(IServiceCollection services)
+        {
+            var dependencieData = new List<Dependency>();
+
+            new ConfigureFromConfigurationOptions<List<Dependency>>(Configuration.GetSection("Dependencies")).Configure(dependencieData);
+            dependencieData = dependencieData.OrderBy(x => x.Name).ToList();
+
+            services.AddHealthChecks().AddDependecies(dependencieData);
+            services.AddHealthChecksUI();
+        }
+
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
             if (env.IsDevelopment())
@@ -25,10 +40,14 @@ namespace HealthCheckWithAspNetCoreDiagnostics
                 app.UseDeveloperExceptionPage();
             }
 
-            app.Run(async (context) =>
+            app.UseHealthChecks("/healthchecks-data-ui", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions()
             {
-                await context.Response.WriteAsync("Hello World!");
+                Predicate = _ => true,
+                ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
             });
+
+
+            app.UseHealthChecksUI();
         }
     }
 }
